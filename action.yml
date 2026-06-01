@@ -194,6 +194,7 @@ runs:
           --project-config '${{ inputs.project-config }}' \
           --pull-type '${{ inputs.pull-type }}' \
           --batch-mode \
+          -e \
           ${{ inputs.pull-args }}
 
     - name: Generate changelogs from the lock diff
@@ -238,6 +239,18 @@ runs:
           base='${{ github.ref_name }}'
         fi
         branch='${{ inputs.branch }}'
+
+        # Final guard against a race with the early skip step: if an OPEN PR for
+        # this branch already exists, do nothing — never force-push over it and
+        # never open a duplicate. Only an OPEN PR counts; a closed/merged one
+        # must not block a fresh sync.
+        existing="$(gh pr list --state open --head "$branch" --json url --jq '.[0].url // empty')"
+        if [ -n "$existing" ]; then
+          echo "An open PR already exists for '$branch'; skipping (no override)."
+          echo "pr-url=$existing" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
         git switch -C "$branch"
 
         msg="$RUNNER_TEMP/commit-msg.txt"
@@ -260,12 +273,15 @@ runs:
           [ -n "$l" ] && labelArgs+=(--label "$l")
         done
 
+        # No open PR exists (verified above), so create one. Don't swallow the
+        # error: a create failure is usually the repo setting "Allow GitHub
+        # Actions to create and approve pull requests" being disabled (gh
+        # returns 403), and hiding it gives a confusing message instead.
         url="$(gh pr create --base "$base" --head "$branch" \
           --title '${{ inputs.pr-title }}' \
           --body-file "$body" \
-          "${labelArgs[@]}" 2>/dev/null \
-          || gh pr view "$branch" --json url --jq .url)"
+          "${labelArgs[@]}")"
 
         echo "changed=true" >> "$GITHUB_OUTPUT"
         echo "pr-url=$url" >> "$GITHUB_OUTPUT"
-        echo "Opened/updated PR: $url"
+        echo "Opened PR: $url"
