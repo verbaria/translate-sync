@@ -1,0 +1,34 @@
+# Example consumer workflow — copy into a project's .github/workflows/.
+name: Sync translations
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: verbaria-translations
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sync
+        uses: verbaria/translate-sync@v1
+        with:
+          server-url: https://translate.example.org/
+          username: ${{ vars.VERBARIA_USERNAME }}
+          api-key: ${{ secrets.VERBARIA_API_KEY }}
+          # pull-type: trans          # trans | source | both
+          # branch: verbaria/translations
+          # pr-labels: translations,automated
+
+      - if: steps.sync.outputs.changed == 'true'
+        run: echo "Opened PR ${{ steps.sync.outputs.pr-url }}"
