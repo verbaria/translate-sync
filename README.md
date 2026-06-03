@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: verbaria/translate-sync@v1
+      - uses: verbaria/translate-sync@master
         with:
           server-url: https://translate.example.org/
           username: ${{ vars.VERBARIA_USERNAME }}
